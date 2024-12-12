@@ -1,219 +1,255 @@
-<p id="header1-field" style="display:none;">{{Header1}}</p>
-<p id="header2-field" style="display:none;">{{Header2}}</p>
-<p id="header3-field" style="display:none;">{{Header3}}</p>
-<p id="header4-field" style="display:none;">{{Header4}}</p>
-<p id="header5-field" style="display:none;">{{Header5}}</p>
+<div id="game-container"></div>
 
-<p id="terms1-field" style="display:none;">{{Terms1}}</p>
-<p id="terms2-field" style="display:none;">{{Terms2}}</p>
-<p id="terms3-field" style="display:none;">{{Terms3}}</p>
-<p id="terms4-field" style="display:none;">{{Terms4}}</p>
-<p id="terms5-field" style="display:none;">{{Terms5}}</p>
+<style>
+    .term {
+        transition: color 0.3s ease, background-color 0.3s ease;
+        cursor: grab;
+        padding: 15px;
+        margin: 3px;
+        display: inline-block;
+        user-select: none; /* Prevent text selection */
+        -webkit-user-select: none; /* For Safari */
+        -moz-user-select: none; /* For Firefox */
+        -ms-user-select: none; /* For older versions of IE */
+    }
 
-<p id="layout-field" style="display:none;">{{Layout}}</p>
+    .term.correct {
+        background-color: lightgreen;
+        color: white;
+    }
 
-<div class="game-container">
-    <h1>{{Title}}</h1>
+    .term.incorrect {
+        background-color: red;
+        color: white;
+    }
 
-    <!-- Tabelas serão criadas dinamicamente via JavaScript -->
-    <div id="dynamic-table"></div>
+    .term.dragging {
+        opacity: 0.5;
+        cursor: grabbing;
+    }
 
-    <div id="terms-container"></div>
-    <div id="checkButton" class="button-like">Check Answers</div>
-    <div id="resetButton" class="button-like" style="display:none;">Reset</div>
-</div>
+    .header {
+        transition: color 0.5s ease;
+        padding: 20px;
+        margin: 3px;
+        text-align: center;
+    }
+
+    .dropzone {
+        min-height: 50px;
+        border: 2px dashed #ccc;
+        padding: 25px;
+    }
+</style>
+
 
 <script>
-    function run() {
-        const layout = document.getElementById("layout-field").innerText.trim().toUpperCase();
+    (function loadGame() {
+        // Ensure complete teardown of previous content
+        const oldContainer = document.getElementById('game-container');
+        if (oldContainer) {
+            oldContainer.innerHTML = ''; // Clear old DOM content
+        }
 
-        const headers = [
-            document.getElementById("header1-field").innerText,
-            document.getElementById("header2-field").innerText,
-            document.getElementById("header3-field").innerText,
-            document.getElementById("header4-field").innerText,
-            document.getElementById("header5-field").innerText
-        ];
+        // Recreate the game structure
+        const container = document.getElementById('game-container');
+        container.innerHTML = `
+            <div class="game-container">
+                <h1 id="title">{{Title}}</h1>
+                <div id="data-store" 
+                    data-header1="{{Header1}}" 
+                    data-header2="{{Header2}}" 
+                    data-header3="{{Header3}}" 
+                    data-header4="{{Header4}}" 
+                    data-header5="{{Header5}}"
+                    data-terms1="{{Terms1}}"
+                    data-terms2="{{Terms2}}"
+                    data-terms3="{{Terms3}}"
+                    data-terms4="{{Terms4}}"
+                    data-terms5="{{Terms5}}"
+                    data-layout="{{Layout}}">
+                </div>
+                <div id="dynamic-table"></div>
+                <div id="terms-container"></div>
+                <div id="checkButton" class="button-like">Check Answers</div>
+                <div id="resetButton" class="button-like" style="display:none;">Reset</div>
+            </div>
+        `;
 
-        const terms = [
-            document.getElementById("terms1-field").innerText.split("|"),
-            document.getElementById("terms2-field").innerText.split("|"),
-            document.getElementById("terms3-field").innerText.split("|"),
-            document.getElementById("terms4-field").innerText.split("|"),
-            document.getElementById("terms5-field").innerText.split("|")
-        ];
+        // Main game logic
+        const colors = ['red', 'red', 'red', 'red', 'red'];
 
-        // Filtrar cabeçalhos e termos que estão em branco
-        const validHeaders = headers.filter((header, index) => header.trim() !== "" && terms[index].length > 0);
-        const validTerms = terms.filter((termList, index) => headers[index].trim() !== "" && termList.length > 0);
+        function shuffleArray(array) {
+            return array.map(value => ({ value, sort: Math.random() }))
+                        .sort((a, b) => a.sort - b.sort)
+                        .map(({ value }) => value);
+        }
 
-        let allTerms = validTerms.flat(); // Todos os termos para embaralhar
+        function cleanup() {
+            document.getElementById("dynamic-table").innerHTML = '';
+            document.getElementById("terms-container").innerHTML = '';
+            document.getElementById("resetButton").style.display = 'none';
+        }
 
-        // Criar dinamicamente a tabela com base no layout e cabeçalhos válidos
-        const dynamicTable = document.getElementById("dynamic-table");
-        dynamicTable.innerHTML = generateTable(layout, validHeaders);
+        function run() {
+    const dataStore = document.getElementById('data-store');
+    const layout = dataStore.getAttribute('data-layout').trim().toUpperCase();
+    const headers = [
+        dataStore.getAttribute('data-header1'),
+        dataStore.getAttribute('data-header2'),
+        dataStore.getAttribute('data-header3'),
+        dataStore.getAttribute('data-header4'),
+        dataStore.getAttribute('data-header5')
+    ];
 
-        const termsContainer = document.getElementById("terms-container");
+    const terms = [
+        dataStore.getAttribute('data-terms1')?.split("|"),
+        dataStore.getAttribute('data-terms2')?.split("|"),
+        dataStore.getAttribute('data-terms3')?.split("|"),
+        dataStore.getAttribute('data-terms4')?.split("|"),
+        dataStore.getAttribute('data-terms5')?.split("|")
+    ];
 
-        function initializeGame() {
-            clearTable();
-            allTerms = allTerms.sort(() => Math.random() - 0.5);
-            termsContainer.innerHTML = allTerms.map(term => `<div class="term draggable" draggable="true">${term}</div>`).join('');
+    const validHeaders = headers.filter((header, index) => header.trim() !== "" && terms[index]?.length > 0);
+    const validTerms = terms.filter((termList, index) => headers[index].trim() !== "" && termList?.length > 0);
 
+    let headerTermPairs = validHeaders.map((header, index) => ({ header, terms: validTerms[index] }));
+    headerTermPairs = shuffleArray(headerTermPairs);
+
+    const shuffledHeaders = headerTermPairs.map(pair => pair.header);
+    const shuffledTerms = headerTermPairs.map(pair => pair.terms);
+    let allTerms = shuffledTerms.flat();
+
+    const dynamicTable = document.getElementById("dynamic-table");
+    dynamicTable.innerHTML = generateTable(layout, shuffledHeaders);
+
+    const termsContainer = document.getElementById("terms-container");
+    termsContainer.innerHTML = shuffleArray(allTerms)
+        .map((term, index) => `<div class="term draggable" draggable="true" data-id="term-${index}">${term}</div>`)
+        .join('');
+
+    assignRandomHeaderColor();
+    initializeDragAndDrop(shuffledTerms);
+}
+
+        function generateTable(layout, headers) {
+            if (layout === '') {
+                return `<table><thead><tr><th></th><th>Terms</th></tr></thead><tbody>` +
+                    headers.map((header, index) => `<tr><th class="header">${header}</th><td class="dropzone" id="zone-${index}"></td></tr>`).join('') +
+                    `</tbody></table>`;
+            } else {
+                return `<table><thead><tr>${headers.map(header => `<th class="header">${header}</th>`).join('')}</tr></thead><tbody><tr>` +
+                    headers.map((_, index) => `<td class="dropzone" id="zone-${index}"></td>`).join('') +
+                    `</tr></tbody></table>`;
+            }
+        }
+
+        function assignRandomHeaderColor() {
+            const shuffledColors = shuffleArray(colors);
+            const headerElements = document.querySelectorAll('.header');
+            headerElements.forEach((header, index) => {
+                if (index < shuffledColors.length) {
+                    header.style.color = shuffledColors[index];
+                }
+            });
+        }
+
+        function initializeDragAndDrop(shuffledTerms) {
             const draggableItems = document.querySelectorAll('.draggable');
+            const dropzones = document.querySelectorAll('.dropzone');
+
             draggableItems.forEach(item => {
                 item.addEventListener('dragstart', dragStart);
                 item.addEventListener('dragend', dragEnd);
             });
 
-            const dropzones = document.querySelectorAll('.dropzone');
             dropzones.forEach(zone => {
                 zone.addEventListener('dragover', dragOver);
                 zone.addEventListener('drop', drop);
             });
 
-            document.getElementById("resetButton").style.display = 'none';
-        }
-
-        function clearTable() {
-            const dropzones = document.querySelectorAll('.dropzone');
-            dropzones.forEach(zone => {
-                zone.innerHTML = ''; // Limpa todos os termos dentro das zonas de drop
-                zone.classList.remove('correct', 'incorrect'); // Remove as classes de estilo
-            });
+            document.getElementById("checkButton").addEventListener('click', () => checkAnswers(shuffledTerms));
+            document.getElementById("resetButton").addEventListener('click', resetGame);
         }
 
         function dragStart(e) {
-            e.dataTransfer.setData('text/plain', e.target.innerText);
-            setTimeout(() => e.target.classList.add('hide'), 0);
-        }
+    e.dataTransfer.setData('text/plain', e.target.getAttribute('data-id')); // Use unique ID
+    setTimeout(() => e.target.classList.add('dragging'), 0);
+}
 
-        function dragEnd(e) {
-            setTimeout(() => {
-                e.target.classList.remove('hide');
-            }, 0);
-        }
+function dragEnd(e) {
+    e.target.classList.remove('dragging');
+}
+
 
         function dragOver(e) {
             e.preventDefault();
         }
 
         function drop(e) {
-            e.preventDefault();
-            const term = e.dataTransfer.getData('text/plain');
-            const targetZone = e.target;
+    e.preventDefault();
+    const termId = e.dataTransfer.getData('text/plain'); // Get the unique ID
+    const dropzone = e.target.closest('.dropzone');
 
-            if (targetZone.classList.contains('dropzone') || targetZone.classList.contains('term')) {
-                if (targetZone.classList.contains('term')) {
-                    targetZone.parentElement.innerHTML += `<div class="term draggable" draggable="true">${term}</div>`;
-                } else {
-                    targetZone.innerHTML += `<div class="term draggable" draggable="true">${term}</div>`;
+    if (!dropzone) return;
+
+    // Check if the same term already exists in the dropzone
+    const existingTerm = Array.from(dropzone.querySelectorAll('.term')).find(el => el.getAttribute('data-id') === termId);
+    if (existingTerm) return; // Prevent duplicates in the same dropzone
+
+    // Find the original term by its unique ID
+    const originalTerm = document.querySelector(`.term[data-id="${termId}"]`);
+
+    if (originalTerm) {
+        dropzone.appendChild(originalTerm); // Move the term to the new dropzone
+        originalTerm.classList.remove('dragging'); // Remove dragging style
+        originalTerm.setAttribute('draggable', 'true'); // Ensure it can be re-dragged
+    }
+}
+
+
+
+
+        function checkAnswers(shuffledTerms) {
+    const dropzones = document.querySelectorAll('.dropzone');
+
+    dropzones.forEach((zone, index) => {
+        const termsInZone = Array.from(zone.getElementsByClassName('term'));
+        const expectedTerms = shuffledTerms[index];
+
+        termsInZone.forEach(termElement => {
+            const term = termElement.innerText.trim();
+            let isCorrect = false;
+
+            // Iterate over each expected term, split by '|' for multiple correct answers
+            expectedTerms.forEach(expectedTerm => {
+                const possibleAnswers = expectedTerm.split('|').map(answer => answer.trim());
+
+                if (possibleAnswers.includes(term)) {
+                    isCorrect = true;
                 }
+            });
 
-                const draggedItem = document.querySelector(`.draggable.hide`);
-                if (draggedItem) draggedItem.remove();
-
-                reattachDragEvents();
+            // Mark the term based on correctness
+            if (isCorrect) {
+                termElement.classList.add('correct');
+                termElement.classList.remove('incorrect');
             } else {
-                const draggedItem = document.querySelector(`.draggable.hide`);
-                if (draggedItem) {
-                    draggedItem.classList.remove('hide');
-                }
-            }
-        }
-
-        function reattachDragEvents() {
-            const draggableItems = document.querySelectorAll('.draggable');
-            draggableItems.forEach(item => {
-                item.removeEventListener('dragstart', dragStart);
-                item.removeEventListener('dragend', dragEnd);
-                item.addEventListener('dragstart', dragStart);
-                item.addEventListener('dragend', dragEnd);
-            });
-        }
-
-        document.getElementById("checkButton").addEventListener('click', checkAnswers);
-        document.getElementById("resetButton").addEventListener('click', initializeGame);
-
-        function checkAnswers() {
-            const dropzones = document.querySelectorAll('.dropzone');
-
-            // Verificar os termos nas caixas (dropzones)
-            dropzones.forEach((zone, index) => {
-                const termsInZone = Array.from(zone.getElementsByClassName('term'));
-                const expectedTerms = validTerms[index]; // Usa apenas termos válidos
-
-                termsInZone.forEach(termElement => {
-                    const term = termElement.innerText.trim(); // Remover espaços desnecessários ao redor do termo
-                    let isCorrect = false;
-
-                    // Verifica se o termo completo é igual ou se é parte dos termos separados por |
-                    expectedTerms.forEach(expectedTerm => {
-                        // Suprimir espaços ao redor de cada termo, mas manter os espaços internos
-                        const possibleAnswers = expectedTerm.split('|').map(t => t.trim()); // Usa trim() para cada termo
-                        if (possibleAnswers.includes(term)) {
-                            isCorrect = true;
-                        }
-                    });
-
-                    // Remove ícones anteriores
-                    termElement.querySelectorAll('.question-plus-one, .question-minus-one').forEach(icon => icon.remove());
-
-                    if (isCorrect) {
-                        termElement.classList.add('correct');
-                        termElement.classList.remove('incorrect');
-                        // Adiciona ícone de +1
-                        termElement.insertAdjacentHTML('beforeend', '<div class="question-plus-one"></div>');
-                    } else {
-                        termElement.classList.add('incorrect');
-                        termElement.classList.remove('correct');
-                        // Adiciona ícone de -1
-                        termElement.insertAdjacentHTML('beforeend', '<div class="question-minus-one"></div>');
-                    }
-                });
-            });
-
-            // Verificar os termos que não foram associados a nenhuma caixa (esquecidos)
-            const remainingTerms = document.querySelectorAll('#terms-container .term');
-            remainingTerms.forEach(termElement => {
-                // Marcar como incorretos (foram esquecidos)
                 termElement.classList.add('incorrect');
                 termElement.classList.remove('correct');
-                // Remove ícones anteriores
-                termElement.querySelectorAll('.question-plus-one, .question-minus-one').forEach(icon => icon.remove());
-                // Adicionar ícone de -1
-                termElement.insertAdjacentHTML('beforeend', '<div class="question-minus-one"></div>');
-            });
+            }
+        });
+    });
 
-            document.getElementById("resetButton").style.display = 'block';
+    document.getElementById("resetButton").style.display = 'block';
+}
+
+        function resetGame() {
+            cleanup();
+            run();
         }
 
-        initializeGame();
-    }
-
-    function generateTable(layout, headers) {
-        let tableHTML = '';
-        if (layout === 'V') {
-            // Layout vertical
-            tableHTML = `<table><thead><tr><th></th><th>Terms</th></tr></thead><tbody>`;
-            headers.forEach((header, index) => {
-                tableHTML += `<tr><th>${header}</th><td id="col${index + 1}-vert" class="dropzone"></td></tr>`;
-            });
-            tableHTML += `</tbody></table>`;
-        } else {
-            // Layout horizontal
-            tableHTML = `<table><thead><tr>`;
-            headers.forEach((header, index) => {
-                tableHTML += `<th id="header${index + 1}">${header}</th>`;
-            });
-            tableHTML += `</tr></thead><tbody><tr>`;
-            headers.forEach((header, index) => {
-                tableHTML += `<td id="col${index + 1}" class="dropzone"></td>`;
-            });
-            tableHTML += `</tr></tbody></table>`;
-        }
-        return tableHTML;
-    }
-
-    run();
+        cleanup();
+        run();
+    })();
 </script>
